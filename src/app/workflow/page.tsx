@@ -12,36 +12,91 @@ import {
   type Edge,
   type OnConnect,
   type OnConnectEnd,
+  type NodeChange,
+  type OnNodesDelete,
+  applyNodeChanges,
 } from "@xyflow/react";
 import TextNode from "../components/TextNode";
+import TriggerNode from "../components/FirstNode";
+import SquareNode from "../components/SecondNode";
 import "@xyflow/react/dist/style.css";
-
 const nodeTypes = {
   text: TextNode,
+  first: TriggerNode,
+  second: SquareNode,
 };
 
 
 const initialNodes = [
   {
     id: "0",
-    type: "text",
-    data: {
-      text: "",
-      isFirst: true,
-    },
+    type: "first",
+    data: { label: "Input", deletable: true },
+
     position: { x: 0, y: 50 },
+  },
+  {
+    id: "1",
+    type: "second",
+    data: { label: "Input", deletable: false },
+    position: { x: 0, y: 120 },
   },
 ];
 
-let id = 1;
+const initialEdges: Edge[] = [
+  {
+    id: "e0-1", 
+    source: "0", 
+    target: "1", 
+    type: "default", 
+  },
+];
+
+let id = 2;
 const getId = () => `${id++}`;
 const nodeOrigin: [number, number] = [0.5, 0];
 
 const AddNodeOnEdgeDrop = () => {
   const reactFlowWrapper = useRef(null);
 
-  const [nodes, setNodes, onNodesChange] = useNodesState<Node>(initialNodes);
-  const [edges, setEdges, onEdgesChange] = useEdgesState<Edge>([]);
+  const [nodes, setNodes] = useNodesState<Node>(initialNodes);
+  const [edges, setEdges, onEdgesChange] = useEdgesState<Edge>(initialEdges);
+  const onNodesChange = useCallback(
+    (changes: NodeChange[]) => {
+      const filtered = changes.filter((change) => {
+        if (change.type === "remove") {
+          const node = nodes.find((n) => n.id === change.id);
+          return node?.data?.deletable !== false;
+        }
+        return true;
+      });
+
+      setNodes((nds) => applyNodeChanges(filtered, nds));
+    },
+    [nodes]
+  );
+  const onNodesDelete: OnNodesDelete = useCallback(
+    (deleted) => {
+      // Only process nodes that are actually deletable
+      const deletableNodes = deleted.filter(
+        (node) => node?.data?.deletable !== false
+      );
+
+      if (deletableNodes.length === 0) return;
+
+      // Remove edges connected to deleted nodes
+      setEdges((edges) =>
+        edges.filter(
+          (edge) =>
+            !deletableNodes.some(
+              (node) => node.id === edge.source || node.id === edge.target
+            )
+        )
+      );
+    },
+    [setEdges]
+  );
+  
   const { screenToFlowPosition } = useReactFlow();
   const onConnect: OnConnect = useCallback(
     (params) => setEdges((eds) => addEdge(params, eds)),
@@ -81,6 +136,12 @@ const AddNodeOnEdgeDrop = () => {
     },
     [screenToFlowPosition]
   );
+
+  
+
+
+
+
 
   function findFirstNode(nodes:Node[],edges:Edge[]){
     const targetIds = new Set(edges.map(e=>e.target))
@@ -188,6 +249,7 @@ const AddNodeOnEdgeDrop = () => {
         fitViewOptions={{ padding: 2 }}
         nodeOrigin={nodeOrigin}
         nodeTypes={nodeTypes}
+        onNodesDelete={onNodesDelete}
       >
         <button
           onClick={runWorkflow}
